@@ -1,0 +1,663 @@
+"""
+Pruebas Unitarias para Módulo de Procesamiento de Datos
+"""
+import os
+import sys
+import unittest
+import pandas as pd
+import tempfile
+from io import BytesIO
+
+
+# Agregar path de módulos
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from modules.data_processing import DataProcessor
+
+class TestDataProcessor(unittest.TestCase):
+    """Clase de pruebas para el procesador de datos"""
+    
+    def setUp(self):
+        """Configuración inicial para las pruebas"""
+        self.processor = DataProcessor()
+        
+        # Datos de prueba válidos
+        self.datos_egresos_validos = pd.DataFrame({
+            'Concepto': ['Personal Administrativo', 'Servicios Públicos', 'Mantenimiento'],
+            'Monto': [45000, 12000, 8000]
+        })
+        
+        # Datos con problemas para testing
+        self.datos_con_problemas = pd.DataFrame({
+            'Concepto': ['Personal', '', 'Servicios', 'Mantenimiento', 'Personal'],  # Duplicado y vacío
+            'Monto': [45000, 0, '12,000', -5000, 20000]  # Formato mixto, cero, negativo
+        })
+    
+    def test_limpieza_datos_egresos(self):
+        """Prueba la limpieza de datos de egresos"""
+        # Datos sucios para limpiar
+        datos_sucios = pd.DataFrame({
+            'Concepto': ['  personal administrativo  ', 'SERVICIOS PÚBLICOS', 'mantenimiento'],
+            'Monto': ['$ 45,000', '12000.50', '8,500']
+        })
+        
+        datos_limpios = self.processor._limpiar_datos_egresos(datos_sucios)
+        
+        # Verificar normalización de conceptos
+        self.assertEqual(datos_limpios['Concepto'].iloc[0], 'Personal Administrativo')
+        self.assertEqual(datos_limpios['Concepto'].iloc[1], 'Servicios Públicos')
+        
+        # Verificar conversión numérica de montos
+        self.assertEqual(datos_limpios['Monto'].iloc[0], 45000)
+        self.assertEqual(datos_limpios['Monto'].iloc[1], 12000.50)
+        self.assertEqual(datos_limpios['Monto'].iloc[2], 8500)
+        
+        # Verificar tipos de datos
+        self.assertTrue(pd.api.types.is_numeric_dtype(datos_limpios['Monto']))
+        self.assertTrue(pd.api.types.is_string_dtype(datos_limpios['Concepto']))
+    
+    def test_consolidacion_duplicados(self):
+        """Prueba la consolidación de conceptos duplicados"""
+        datos_duplicados = pd.DataFrame({
+            'Concepto': ['Personal', 'Servicios', 'Personal', 'Mantenimiento'],
+            'Monto': [20000, 10000, 25000, 8000]
+        })
+        
+        datos_consolidados = self.processor._consolidar_conceptos_duplicados(datos_duplicados)
+        
+        # Debe haber menos filas después de consolidar
+        self.assertLess(len(datos_consolidados), len(datos_duplicados))
+        
+        # El concepto Personal debe tener la suma de ambos montos
+        personal_consolidado = datos_consolidados[
+            datos_consolidados['Concepto'] == 'Personal'
+        ]['Monto'].iloc[0]
+        self.assertEqual(personal_consolidado, 45000)  # 20000 + 25000
+    
+    def test_validacion_datos_egresos(self):
+        """Prueba la validación de datos de egresos"""
+        errores = self.processor._validar_datos_egresos(self.datos_con_problemas)
+        
+        # Debe detectar varios problemas
+        self.assertGreater(len(errores), 0)
+        
+        # Verificar detección específica de problemas
+        errores_str = ' '.join(errores)
+        self.assertIn('vacíos', errores_str.lower())
+        self.assertIn('negativos', errores_str.lower())
+    
+    def test_filtrado_datos_validos(self):
+        """Prueba el filtrado de datos válidos"""
+        datos_filtrados = self.processor._filtrar_datos_validos(self.datos_con_problemas)
+        
+        # Debe eliminar filas problemáticas
+        self.assertLess(len(datos_filtrados), len(self.datos_con_problemas))
+        
+        # Todos los montos deben ser positivos
+        self.assertTrue((datos_filtrados['Monto'] > 0).all())
+        
+        # Ningún concepto debe estar vacío
+        self.assertFalse(datos_filtrados['Concepto'].isna().any())
+        self.assertTrue((datos_filtrados['Concepto'].str.len() > 0).all())
+    
+    def test_deteccion_columnas_similares(self):
+        """Prueba la detección de columnas similares"""
+        columnas_archivo = ['Conceptos', 'Valor', 'Descripcion']
+        columnas_requeridas = ['Concepto', 'Monto']
+        
+        similares = self.processor._detectar_columnas_similares(
+            columnas_archivo, columnas_requeridas
+        )
+        
+        # Debe detectar coincidencias aproximadas
+        self.assertIn('Concepto', similares)
+        self.assertEqual(similares['Concepto'], 'Conceptos')
+        
+        # Puede detectar 'Valor' como similar a 'Monto' dependiendo del threshold
+        # self.assertIn('Monto', similares)
+    
+    def test_generacion_distribucion_temporal(self):
+        """Prueba la generación de distribuciones temporales"""
+        monto_base = 120000
+        meses = 12
+        
+        # Distribución uniforme
+        dist_uniforme = self.processor.generar_distribucion_temporal(
+            monto_base, meses, 'uniforme'
+        )
+        
+        self.assertEqual(len(dist_uniforme), meses)
+        self.assertAlmostEqual(sum(dist_uniforme.values()), monto_base, places=2)
+        
+        # Todos los valores deben ser iguales en distribución uniforme
+        valores = list(dist_uniforme.values())
+        self.assertTrue(all(abs(v - valores[0]) < 1 for v in valores))
+        
+        # Distribución creciente
+        dist_creciente = self.processor.generar_distribucion_temporal(
+            monto_base, meses, 'creciente'
+        )
+        
+        valores_crecientes = list(dist_creciente.values())
+        self.assertLess(valores_crecientes[0], valores_crecientes[-1])
+        
+        # Distribución decreciente
+        dist_decreciente = self.processor.generar_distribucion_temporal(
+           monto_base, meses, 'decreciente'
+       )
+       
+       valores_decrecientes = list(dist_decreciente.values())
+       self.assertGreater(valores_decrecientes[0], valores_decrecientes[-1])
+       
+       # Suma debe ser igual al monto base para todas las distribuciones
+       self.assertAlmostEqual(sum(dist_creciente.values()), monto_base, places=2)
+       self.assertAlmostEqual(sum(dist_decreciente.values()), monto_base, places=2)
+   
+   def test_proyeccion_serie_temporal(self):
+       """Prueba la proyección de series temporales"""
+       valor_base = 10000
+       meses = 24
+       tasa_crecimiento = 0.02  # 2% mensual
+       volatilidad = 0.05
+       
+       # Serie con tendencia lineal
+       serie_lineal = self.processor.proyectar_serie_temporal(
+           valor_base, meses, tasa_crecimiento, volatilidad, 'lineal'
+       )
+       
+       self.assertEqual(len(serie_lineal), meses)
+       self.assertTrue(all(v >= 0 for v in serie_lineal))  # No valores negativos
+       
+       # Debe mostrar tendencia creciente general
+       promedio_primera_mitad = np.mean(serie_lineal[:meses//2])
+       promedio_segunda_mitad = np.mean(serie_lineal[meses//2:])
+       self.assertGreater(promedio_segunda_mitad, promedio_primera_mitad)
+       
+       # Serie con tendencia exponencial
+       serie_exponencial = self.processor.proyectar_serie_temporal(
+           valor_base, meses, tasa_crecimiento, volatilidad, 'exponencial'
+       )
+       
+       # El crecimiento exponencial debe ser más pronunciado que el lineal
+       self.assertGreater(serie_exponencial[-1], serie_lineal[-1])
+       
+       # Serie logística
+       serie_logistica = self.processor.proyectar_serie_temporal(
+           valor_base, meses, tasa_crecimiento, volatilidad, 'logistica'
+       )
+       
+       # Debe estabilizarse cerca del límite superior
+       self.assertLess(serie_logistica[-1], valor_base * 2.1)  # Límite + tolerancia
+   
+   def test_calculo_metricas_serie(self):
+       """Prueba el cálculo de métricas estadísticas"""
+       # Serie de prueba con características conocidas
+       serie_test = [100, 110, 105, 120, 115, 125, 130, 135, 140, 145]
+       
+       metricas = self.processor.calcular_metricas_serie(serie_test)
+       
+       # Verificar que todas las métricas están presentes
+       metricas_esperadas = [
+           'media', 'mediana', 'desviacion_estandar', 'coeficiente_variacion',
+           'minimo', 'maximo', 'rango', 'suma_total', 'percentil_25', 'percentil_75',
+           'asimetria', 'curtosis', 'tasa_crecimiento_promedio'
+       ]
+       
+       for metrica in metricas_esperadas:
+           self.assertIn(metrica, metricas)
+           self.assertIsInstance(metricas[metrica], (int, float))
+       
+       # Verificar algunos cálculos específicos
+       self.assertEqual(metricas['minimo'], 100)
+       self.assertEqual(metricas['maximo'], 145)
+       self.assertEqual(metricas['rango'], 45)
+       self.assertEqual(metricas['suma_total'], sum(serie_test))
+       self.assertAlmostEqual(metricas['media'], np.mean(serie_test), places=2)
+       
+       # Serie creciente debe tener tasa de crecimiento positiva
+       self.assertGreater(metricas['tasa_crecimiento_promedio'], 0)
+   
+   def test_generacion_factores_estacionales(self):
+       """Prueba la generación de factores estacionales"""
+       meses = 24  # 2 años
+       
+       factores = self.processor._generar_factores_estacionales(meses)
+       
+       self.assertEqual(len(factores), meses)
+       
+       # Todos los factores deben ser positivos
+       self.assertTrue(all(f > 0 for f in factores.values()))
+       
+       # Debe haber variación estacional (no todos iguales)
+       valores = list(factores.values())
+       self.assertGreater(max(valores) - min(valores), 0.1)
+       
+       # Patrón debe repetirse cada 12 meses aproximadamente
+       if meses >= 24:
+           diferencia_ciclo = abs(factores[1] - factores[13])
+           self.assertLess(diferencia_ciclo, 0.1)  # Tolerancia para similitud cíclica
+   
+   def test_creacion_archivo_excel_temporal(self):
+       """Prueba la creación y lectura de archivos Excel temporales"""
+       # Crear archivo Excel temporal para pruebas
+       with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+           # Escribir datos de prueba
+           with pd.ExcelWriter(tmp_file.name, engine='openpyxl') as writer:
+               self.datos_egresos_validos.to_excel(writer, index=False, sheet_name='Egresos')
+           
+           # Simular carga del archivo
+           class MockFile:
+               def __init__(self, filename):
+                   self.name = filename
+                   with open(filename, 'rb') as f:
+                       self.content = f.read()
+               
+               def read(self):
+                   return self.content
+           
+           mock_file = MockFile(tmp_file.name)
+           
+           # Procesar archivo
+           df_procesado, errores = self.processor.validar_archivo_excel(mock_file)
+           
+           # Verificar procesamiento exitoso
+           self.assertIsNotNone(df_procesado)
+           self.assertEqual(len(errores), 0)
+           self.assertEqual(len(df_procesado), len(self.datos_egresos_validos))
+           
+           # Limpiar archivo temporal
+           os.unlink(tmp_file.name)
+   
+   def test_manejo_archivos_corruptos(self):
+       """Prueba el manejo de archivos corruptos o mal formateados"""
+       # Crear archivo no-Excel
+       class MockFileCorrupto:
+           name = 'archivo_corrupto.xlsx'
+           
+           def read(self):
+               return b'Este no es un archivo Excel válido'
+       
+       mock_corrupto = MockFileCorrupto()
+       
+       df_procesado, errores = self.processor.validar_archivo_excel(mock_corrupto)
+       
+       # Debe manejar el error graciosamente
+       self.assertIsNone(df_procesado)
+       self.assertGreater(len(errores), 0)
+       self.assertTrue(any('Error procesando archivo' in error for error in errores))
+   
+   def test_validacion_columnas_faltantes(self):
+       """Prueba validación cuando faltan columnas requeridas"""
+       # Crear archivo con columnas incorrectas
+       datos_columnas_incorrectas = pd.DataFrame({
+           'Descripcion': ['Item 1', 'Item 2'],
+           'Valor': [1000, 2000],
+           'Categoria': ['A', 'B']
+       })
+       
+       with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+           with pd.ExcelWriter(tmp_file.name, engine='openpyxl') as writer:
+               datos_columnas_incorrectas.to_excel(writer, index=False)
+           
+           class MockFileIncorrecto:
+               def __init__(self, filename):
+                   self.name = filename
+                   with open(filename, 'rb') as f:
+                       self.content = f.read()
+               
+               def read(self):
+                   return self.content
+           
+           mock_file = MockFileIncorrecto(tmp_file.name)
+           
+           df_procesado, errores = self.processor.validar_archivo_excel(mock_file)
+           
+           # Debe detectar columnas faltantes
+           self.assertIsNone(df_procesado)
+           self.assertTrue(any('Columnas faltantes' in error for error in errores))
+           
+           # Puede sugerir columnas similares
+           errores_texto = ' '.join(errores)
+           # 'Descripcion' podría sugerirse como similar a 'Concepto'
+           
+           os.unlink(tmp_file.name)
+   
+   def test_exportacion_datos_excel(self):
+       """Prueba la exportación de datos a Excel"""
+       datos_exportar = {
+           'Hoja1': self.datos_egresos_validos,
+           'Hoja2': pd.DataFrame({
+               'Mes': [1, 2, 3],
+               'Valor': [1000, 2000, 3000]
+           })
+       }
+       
+       excel_bytes = self.processor.exportar_datos_procesados(datos_exportar, 'excel')
+       
+       # Verificar que se generó contenido
+       self.assertIsInstance(excel_bytes, bytes)
+       self.assertGreater(len(excel_bytes), 0)
+       
+       # Verificar que es un archivo Excel válido leyéndolo de vuelta
+       excel_buffer = BytesIO(excel_bytes)
+       df_leido = pd.read_excel(excel_buffer, sheet_name='Hoja1')
+       
+       self.assertEqual(len(df_leido), len(self.datos_egresos_validos))
+       self.assertListEqual(list(df_leido.columns), ['Concepto', 'Monto'])
+   
+   def test_exportacion_datos_csv(self):
+       """Prueba la exportación de datos a CSV"""
+       datos_exportar = {'Principal': self.datos_egresos_validos}
+       
+       csv_bytes = self.processor.exportar_datos_procesados(datos_exportar, 'csv')
+       
+       # Verificar contenido CSV
+       self.assertIsInstance(csv_bytes, bytes)
+       csv_content = csv_bytes.decode('utf-8')
+       
+       self.assertIn('Concepto,Monto', csv_content)
+       self.assertIn('Personal Administrativo', csv_content)
+   
+   def test_exportacion_datos_json(self):
+       """Prueba la exportación de datos a JSON"""
+       datos_exportar = {
+           'egresos': self.datos_egresos_validos,
+           'metadatos': {'fecha': '2025-01-01', 'version': '1.0'}
+       }
+       
+       json_bytes = self.processor.exportar_datos_procesados(datos_exportar, 'json')
+       
+       # Verificar contenido JSON
+       self.assertIsInstance(json_bytes, bytes)
+       
+       import json
+       json_content = json.loads(json_bytes.decode('utf-8'))
+       
+       self.assertIn('egresos', json_content)
+       self.assertIn('metadatos', json_content)
+       self.assertEqual(len(json_content['egresos']), len(self.datos_egresos_validos))
+
+
+class TestIntegracionDataProcessing(unittest.TestCase):
+   """Pruebas de integración del procesamiento de datos"""
+   
+   def setUp(self):
+       """Configuración para pruebas de integración"""
+       self.processor = DataProcessor()
+       
+       # Crear dataset complejo para pruebas
+       self.datos_complejos = pd.DataFrame({
+           'Concepto': [
+               'Personal Administrativo', 'Personal Operativo', 'Servicios Públicos',
+               'Mantenimiento Equipos', 'Combustibles', 'Papelería',
+               'Comunicaciones', 'Seguros', 'Impuestos', 'Otros Gastos',
+               'personal administrativo', 'SERVICIOS PUBLICOS',  # Duplicados con diferente formato
+               '', 'Concepto Vacío', 'Concepto Muy Largo ' * 10
+           ],
+           'Monto': [
+               45000, 65000, 12000, 8000, 15000, 3500,
+               2800, 6500, 4200, 5000,
+               5000, 2000,  # Para duplicados
+               0, -1000, 1000  # Valores problemáticos
+           ]
+       })
+   
+   def test_procesamiento_completo_datos_complejos(self):
+       """Prueba procesamiento completo de datos complejos"""
+       # Limpiar datos
+       datos_limpios = self.processor._limpiar_datos_egresos(self.datos_complejos)
+       
+       # Validar
+       errores = self.processor._validar_datos_egresos(datos_limpios)
+       
+       # Debe detectar varios problemas
+       self.assertGreater(len(errores), 0)
+       
+       # Filtrar datos válidos
+       datos_finales = self.processor._filtrar_datos_validos(datos_limpios)
+       
+       # Debe haber eliminado filas problemáticas
+       self.assertLess(len(datos_finales), len(self.datos_complejos))
+       
+       # Verificar calidad de datos finales
+       self.assertTrue((datos_finales['Monto'] > 0).all())
+       self.assertFalse(datos_finales['Concepto'].isna().any())
+       
+       # Calcular métricas del resultado
+       metricas = self.processor.calcular_metricas_serie(datos_finales['Monto'].tolist())
+       
+       self.assertIn('media', metricas)
+       self.assertGreater(metricas['media'], 0)
+   
+   def test_flujo_completo_con_distribucion_temporal(self):
+       """Prueba flujo completo incluyendo distribución temporal"""
+       # 1. Procesar datos base
+       datos_finales = self.processor._filtrar_datos_validos(
+           self.processor._limpiar_datos_egresos(self.datos_complejos)
+       )
+       
+       # 2. Calcular total base
+       total_base = datos_finales['Monto'].sum()
+       
+       # 3. Generar distribuciones temporales
+       meses = 24
+       distribuciones = {}
+       
+       tipos_distribucion = ['uniforme', 'creciente', 'decreciente', 'exponencial', 'estacional']
+       
+       for tipo in tipos_distribucion:
+           dist = self.processor.generar_distribucion_temporal(
+               total_base, meses, tipo
+           )
+           distribuciones[tipo] = dist
+           
+           # Verificar que cada distribución suma al total
+           self.assertAlmostEqual(sum(dist.values()), total_base, places=1)
+       
+       # 4. Generar proyecciones temporales para cada tipo
+       proyecciones = {}
+       
+       for tipo, distribucion in distribuciones.items():
+           valor_promedio = total_base / meses
+           proyeccion = self.processor.proyectar_serie_temporal(
+               valor_promedio, meses, 0.01, 0.03, 'lineal'
+           )
+           proyecciones[tipo] = proyeccion
+           
+           self.assertEqual(len(proyeccion), meses)
+       
+       # 5. Calcular métricas comparativas
+       metricas_comparativas = {}
+       for tipo, proyeccion in proyecciones.items():
+           metricas_comparativas[tipo] = self.processor.calcular_metricas_serie(proyeccion)
+       
+       # Verificar que todas las proyecciones tienen métricas válidas
+       for tipo, metricas in metricas_comparativas.items():
+           self.assertGreater(metricas['media'], 0)
+           self.assertIsInstance(metricas['tasa_crecimiento_promedio'], (int, float))
+   
+   def test_generacion_escenarios_monte_carlo(self):
+       """Prueba la generación de escenarios Monte Carlo"""
+       # Parámetros base simulados
+       parametros_base = {
+           'ingresos': [50000, 52000, 54000, 56000, 58000, 60000],
+           'egresos': [30000, 31000, 32000, 33000, 34000, 35000],
+           'inversion': 150000
+       }
+       
+       # Generar escenarios
+       num_simulaciones = 100  # Reducido para pruebas rápidas
+       resultados = self.processor.generar_escenarios_monte_carlo(
+           parametros_base, num_simulaciones
+       )
+       
+       # Verificar estructura de resultados
+       metricas_esperadas = ['tir', 'vpn', 'roi', 'payback']
+       for metrica in metricas_esperadas:
+           self.assertIn(metrica, resultados)
+           self.assertGreater(len(resultados[metrica]), 0)
+       
+       # Verificar distribución de resultados
+       tirs = resultados['tir']
+       vpns = resultados['vpn']
+       
+       # Debe haber variabilidad en los resultados
+       self.assertGreater(np.std(tirs), 0)
+       self.assertGreater(np.std(vpns), 0)
+       
+       # Calcular estadísticas de los escenarios
+       estadisticas_tir = self.processor.calcular_metricas_serie(tirs)
+       estadisticas_vpn = self.processor.calcular_metricas_serie(vpns)
+       
+       # Verificar estadísticas válidas
+       self.assertGreater(len(estadisticas_tir), 0)
+       self.assertGreater(len(estadisticas_vpn), 0)
+   
+   def test_limpieza_cache_y_reinicio(self):
+       """Prueba la limpieza de cache y reinicio del procesador"""
+       # Contaminar el procesador con datos
+       self.processor.datos_validados = {'test': 'data'}
+       self.processor.errores_validacion = ['error1', 'error2']
+       self.processor.advertencias = ['warning1']
+       
+       # Verificar que tiene datos
+       self.assertGreater(len(self.processor.datos_validados), 0)
+       self.assertGreater(len(self.processor.errores_validacion), 0)
+       self.assertGreater(len(self.processor.advertencias), 0)
+       
+       # Limpiar cache
+       self.processor.limpiar_cache()
+       
+       # Verificar limpieza
+       self.assertEqual(len(self.processor.datos_validados), 0)
+       self.assertEqual(len(self.processor.errores_validacion), 0)
+       self.assertEqual(len(self.processor.advertencias), 0)
+
+
+class TestPerformanceDataProcessing(unittest.TestCase):
+   """Pruebas de rendimiento para procesamiento de datos"""
+   
+   def setUp(self):
+       """Configuración para pruebas de rendimiento"""
+       self.processor = DataProcessor()
+   
+   def test_procesamiento_datos_grandes(self):
+       """Prueba procesamiento de datasets grandes"""
+       import time
+       
+       # Generar dataset grande (1000 filas)
+       np.random.seed(42)
+       conceptos = [f'Concepto_{i}' for i in range(1000)]
+       montos = np.random.lognormal(mean=10, sigma=1, size=1000)  # Distribución realista
+       
+       datos_grandes = pd.DataFrame({
+           'Concepto': conceptos,
+           'Monto': montos
+       })
+       
+       # Medir tiempo de procesamiento
+       inicio = time.time()
+       
+       datos_limpios = self.processor._limpiar_datos_egresos(datos_grandes)
+       errores = self.processor._validar_datos_egresos(datos_limpios)
+       datos_finales = self.processor._filtrar_datos_validos(datos_limpios)
+       metricas = self.processor.calcular_metricas_serie(datos_finales['Monto'].tolist())
+       
+       tiempo_total = time.time() - inicio
+       
+       # Verificar que se procesa en tiempo razonable (< 5 segundos)
+       self.assertLess(tiempo_total, 5.0)
+       
+       # Verificar resultados
+       self.assertEqual(len(datos_finales), 1000)  # No debe perder datos válidos
+       self.assertIn('media', metricas)
+       
+       print(f"\nRendimiento - Procesamiento 1000 filas: {tiempo_total:.3f}s")
+   
+   def test_proyeccion_largo_plazo(self):
+       """Prueba proyecciones a largo plazo (10 años)"""
+       import time
+       
+       meses_largo_plazo = 120  # 10 años
+       valor_base = 50000
+       
+       inicio = time.time()
+       
+       # Generar múltiples tipos de proyecciones
+       tipos_tendencia = ['lineal', 'exponencial', 'logistica']
+       proyecciones = {}
+       
+       for tendencia in tipos_tendencia:
+           proyecciones[tendencia] = self.processor.proyectar_serie_temporal(
+               valor_base, meses_largo_plazo, 0.005, 0.02, tendencia
+           )
+       
+       tiempo_proyeccion = time.time() - inicio
+       
+       # Calcular métricas para cada proyección
+       inicio_metricas = time.time()
+       
+       metricas_todas = {}
+       for tendencia, serie in proyecciones.items():
+           metricas_todas[tendencia] = self.processor.calcular_metricas_serie(serie)
+       
+       tiempo_metricas = time.time() - inicio_metricas
+       tiempo_total = time.time() - inicio
+       
+       # Verificar rendimiento
+       self.assertLess(tiempo_total, 3.0)  # Debe completarse en menos de 3 segundos
+       
+       # Verificar resultados
+       for tendencia, serie in proyecciones.items():
+           self.assertEqual(len(serie), meses_largo_plazo)
+           self.assertTrue(all(v >= 0 for v in serie))
+       
+       print(f"\nRendimiento - Proyección 120 meses:")
+       print(f"  Proyección: {tiempo_proyeccion:.3f}s")
+       print(f"  Métricas: {tiempo_metricas:.3f}s")
+       print(f"  Total: {tiempo_total:.3f}s")
+
+
+if __name__ == '__main__':
+   # Configurar y ejecutar suite de pruebas
+   suite = unittest.TestSuite()
+   
+   # Pruebas básicas
+   suite.addTest(unittest.makeSuite(TestDataProcessor))
+   
+   # Pruebas de integración
+   suite.addTest(unittest.makeSuite(TestIntegracionDataProcessing))
+   
+   # Pruebas de rendimiento
+   suite.addTest(unittest.makeSuite(TestPerformanceDataProcessing))
+   
+   # Ejecutar con reporte detallado
+   runner = unittest.TextTestRunner(verbosity=2, buffer=True)
+   result = runner.run(suite)
+   
+   # Resumen final
+   print(f"\n{'='*70}")
+   print(f"RESUMEN PRUEBAS DATA PROCESSING - SISTEMA SEMAVENCA")
+   print(f"{'='*70}")
+   print(f"Total pruebas: {result.testsRun}")
+   print(f"Exitosas: {result.testsRun - len(result.failures) - len(result.errors)}")
+   print(f"Fallidas: {len(result.failures)}")
+   print(f"Errores: {len(result.errors)}")
+   
+   if result.wasSuccessful():
+       print("✅ Todas las pruebas pasaron exitosamente")
+       print("\n📊 El módulo de procesamiento de datos está listo para producción")
+   else:
+       print("❌ Se encontraron problemas:")
+       
+       if result.failures:
+           print(f"\nFALLOS:")
+           for test, error in result.failures:
+               print(f"  - {test}")
+       
+       if result.errors:
+           print(f"\nERRORES:")
+           for test, error in result.errors:
+               print(f"  - {test}")
+   
+   print(f"\nTasa de éxito: {(result.testsRun - len(result.failures) - len(result.errors))/result.testsRun*100:.1f}%")

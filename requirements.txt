@@ -1,0 +1,39 @@
+# Dependencias principales de la aplicación
+streamlit>=1.28.0
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Visualizaciones
+plotly>=5.15.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Manejo de archivos
+openpyxl>=3.1.0
+xlsxwriter>=3.1.0
+xlrd>=2.0.1
+
+# Procesamiento de imágenes
+pillow>=9.5.0
+
+# Generación de reportes PDF
+reportlab>=4.0.0
+
+# Utilidades de fecha y tiempo
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# Validación de datos
+validators>=0.20.0
+
+# Optimización numérica adicional
+scikit-learn>=1.3.0
+
+# Utilidades de desarrollo
+black>=23.0.0
+pytest>=7.4.0
+
+# Dependencias del sistema
+setuptools>=68.0.0
+wheel>=0.41.0

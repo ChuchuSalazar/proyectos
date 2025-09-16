@@ -1,0 +1,455 @@
+================================================================================
+                    SISTEMA SEMAVENCA - MAPEO COMPLETO DE ESTRUCTURA
+                          Evaluación de Proyectos de Inversión
+================================================================================
+
+ESTRUCTURA DE DIRECTORIOS:
+├── main_app.py                    [ARCHIVO PRINCIPAL]
+├── modules/
+│   ├── __init__.py
+│   ├── financial_calculations.py [CÁLCULOS FINANCIEROS]
+│   ├── data_processing.py        [PROCESAMIENTO DE DATOS]
+│   ├── visualizations.py         [VISUALIZACIONES]
+│   ├── reports.py                [GENERACIÓN DE REPORTES]
+│   └── utils.py                  [UTILIDADES Y FUNCIONES AUXILIARES]
+├── assets/
+│   └── style.css                 [ESTILOS CSS PERSONALIZADOS]
+├── data/
+│   ├── ejemplos/
+│   └── templates/
+└── requirements.txt              [DEPENDENCIAS]
+
+================================================================================
+                             ARCHIVO PRINCIPAL
+================================================================================
+
+main_app.py
+├── IMPORTACIONES:
+│   ├── streamlit as st
+│   ├── pandas as pd
+│   ├── numpy as np
+│   ├── datetime, warnings, sys, os, chardet, pathlib, traceback
+│   └── modules.*
+│
+├── FUNCIONES PRINCIPALES:
+│   ├── load_css()                     → Carga estilos CSS personalizados
+│   ├── main()                         → Función principal de la aplicación
+│   ├── mostrar_inicio()               → Página de inicio con información
+│   ├── configuracion_financiera()     → Sección de configuración completa
+│   ├── mostrar_analisis()             → Análisis financiero detallado
+│   ├── mostrar_visualizaciones()      → Todas las visualizaciones
+│   └── generar_reportes()             → Generación y descarga de reportes
+│
+├── FUNCIONES DE CONFIGURACIÓN:
+│   ├── configurar_inversion_inicial() → Inversión y fase preoperativa
+│   ├── configurar_ingresos()          → Parámetros de ingresos operativos
+│   ├── configurar_egresos()           → Configuración de egresos operativos
+│   └── generar_proyeccion_completa()  → Proyección completa del proyecto
+│
+├── FUNCIONES DE ANÁLISIS:
+│   ├── mostrar_indicadores_principales() → TIR, VPN, ROI, viabilidad
+│   ├── mostrar_analisis_sensibilidad()   → Configurar análisis sensibilidad
+│   ├── mostrar_analisis_escenarios()     → Comparación de escenarios
+│   └── mostrar_analisis_detallado()      → Estadísticas detalladas
+│
+├── FUNCIONES AUXILIARES:
+│   └── cargar_archivo_excel_mejorado()   → Validación estricta de Excel
+│
+└── VARIABLES GLOBALES:
+    ├── current_dir                    → Directorio actual del archivo
+    ├── MODULES_LOADED                 → Estado de carga de módulos
+    └── session_state variables       → Estado de sesión de Streamlit
+
+================================================================================
+                          MÓDULO: financial_calculations.py
+================================================================================
+
+CLASE PRINCIPAL:
+ProyectoInversion
+├── ATRIBUTOS DE INSTANCIA:
+│   ├── inversion_inicial: float           → Monto de inversión inicial
+│   ├── meses_preoperativos: int          → Período preoperativo
+│   ├── distribucion_preoperativa: Dict   → Distribución mensual preoperativa
+│   ├── saldos_preoperativos: List        → Saldos calculados por mes
+│   ├── configuracion_ingresos: Dict      → Parámetros de ingresos
+│   ├── configuracion_egresos: Dict       → Parámetros de egresos
+│   ├── flujo_efectivo: List[float]       → Flujos de efectivo mensuales
+│   ├── ingresos_operativos: List[float]  → Ingresos operativos proyectados
+│   ├── egresos_operativos: List[float]   → Egresos operativos proyectados
+│   └── indicadores: Dict                 → Indicadores financieros calculados
+│
+├── MÉTODOS DE FASE PREOPERATIVA:
+│   ├── __init__(self)                    → Constructor de la clase
+│   ├── calcular_saldos_preoperativos()   → Saldos mensuales preoperativos
+│   ├── calcular_ingresos_operativos()    → Proyección de ingresos
+│   └── calcular_egresos_operativos()     → Proyección de egresos
+│
+├── MÉTODOS DE CÁLCULO FINANCIERO (EXCEL-COMPATIBLE):
+│   ├── _convertir_flujos_si_necesario()  → Convierte flujos acumulados/período
+│   ├── _tir_excel_newton()               → Newton-Raphson Excel-compatible
+│   ├── calcular_tir()                    → TIR con metodología exacta Excel
+│   │   ├── Parámetros: flujos_efectivo, inversion_inicial, max_iteraciones
+│   │   ├── Keywords: guess, devolver, periodos_por_anio, excel_compatible, input_tipo
+│   │   ├── Algoritmo: Newton-Raphson, 20 iteraciones, tolerancia 1e-7
+│   │   └── Returns: TIR anual/período o None (#NUM!)
+│   ├── calcular_vpn()                    → VPN con fórmula exacta Excel
+│   │   ├── Fórmula: Σ(Flujo_t/(1+r)^t) - Inversión
+│   │   ├── Conversión: Tasa anual → mensual automática
+│   │   └── Returns: VPN en moneda base
+│   ├── calcular_roi()                    → ROI estándar
+│   │   ├── Fórmula: ((Beneficio-Inversión)/Inversión)*100
+│   │   └── Returns: ROI en porcentaje
+│   └── calcular_periodo_recuperacion()   → Payback period con interpolación
+│
+├── MÉTODOS DE ANÁLISIS:
+│   ├── analisis_sensibilidad()           → Análisis multivariable corregido
+│   │   ├── Input: variaciones_ingresos, variaciones_egresos, tasa_descuento
+│   │   ├── Proceso: Matriz [egresos x ingresos] de TIR y VPN
+│   │   └── Output: {"tir_matriz", "vpn_matriz", "variaciones_ing", "variaciones_egr"}
+│   └── validar_flujos_para_tir()         → Validación estilo Excel
+│
+└── MÉTODOS DE DEBUG:
+    └── debug_tir()                       → Información detallada para debugging
+
+================================================================================
+                            MÓDULO: data_processing.py
+================================================================================
+
+CLASE PRINCIPAL:
+DataProcessor
+├── ATRIBUTOS DE INSTANCIA:
+│   ├── datos_validados: Dict             → Datos procesados y validados
+│   ├── errores_validacion: List[str]     → Lista de errores encontrados
+│   └── advertencias: List[str]           → Lista de advertencias generadas
+│
+├── MÉTODOS DE VALIDACIÓN DE EXCEL:
+│   ├── validar_archivo_excel()           → Validación completa de archivo Excel
+│   ├── _detectar_columnas_similares()    → Detección automática de columnas
+│   ├── _limpiar_datos_egresos()          → Limpieza y normalización de datos
+│   ├── _consolidar_conceptos_duplicados() → Consolidación de conceptos duplicados
+│   ├── _validar_datos_egresos()          → Validaciones específicas de calidad
+│   └── _filtrar_datos_validos()          → Filtrado de datos válidos únicamente
+│
+├── MÉTODOS DE DISTRIBUCIÓN TEMPORAL:
+│   ├── generar_distribucion_temporal()   → Distribución de montos en el tiempo
+│   │   ├── Tipos: "uniforme", "creciente", "decreciente", "exponencial", "estacional"
+│   │   └── Returns: Dict[mes, monto]
+│   ├── _generar_factores_estacionales()  → Factores estacionales con función seno
+│   └── proyectar_serie_temporal()        → Proyección con crecimiento y volatilidad
+│       ├── Tendencias: "lineal", "exponencial", "logistica"
+│       └── Incluye: ruido aleatorio, semilla reproducible
+│
+├── MÉTODOS DE ANÁLISIS ESTADÍSTICO:
+│   ├── calcular_metricas_serie()         → Métricas estadísticas completas
+│   │   ├── Básicas: media, mediana, desviación, coef_variación
+│   │   ├── Avanzadas: asimetría, curtosis, tasa_crecimiento_promedio
+│   │   └── Distribución: percentiles, rango, min, max
+│   ├── _calcular_asimetria()             → Asimetría (con scipy o manual)
+│   ├── _calcular_curtosis()              → Curtosis (con scipy o manual)
+│   └── _calcular_tasa_crecimiento_promedio() → Tasa geométrica de crecimiento
+│
+├── MÉTODOS DE SIMULACIÓN:
+│   ├── generar_escenarios_monte_carlo()  → Simulación Monte Carlo
+│   │   ├── Parámetros: num_simulaciones (default 1000)
+│   │   ├── Variaciones: ±15% ingresos, ±10% egresos, ±5% inversión
+│   │   └── Returns: {"tir", "vpn", "roi", "payback"}
+│   └── limpiar_cache()                   → Limpieza de cache y datos temporales
+│
+└── MÉTODOS DE EXPORTACIÓN:
+    └── exportar_datos_procesados()       → Exportación en múltiples formatos
+        ├── Formatos: "excel", "csv", "json"
+        └── Returns: bytes del archivo generado
+
+================================================================================
+                            MÓDULO: visualizations.py
+================================================================================
+
+FUNCIONES DE VISUALIZACIÓN (MATPLOTLIB):
+├── crear_dashboard_indicadores()         → Dashboard principal con indicadores
+│   ├── Input: ProyectoInversion
+│   ├── Gráficos: TIR gauge, VPN escenarios, recuperación inversión
+│   ├── Estilos: barras horizontales, líneas con marcadores, fills
+│   └── Returns: (fig_tir, fig_vpn, fig_recuperacion)
+│
+├── crear_analisis_flujo_efectivo()       → Análisis detallado flujo efectivo
+│   ├── Subplots: 2x2 grid (flujos mensual, acumulado, distribución, volatilidad)
+│   ├── Gráficos: barras apiladas, líneas, pie chart, coeficiente variación
+│   ├── Features: fill_between, grid, leyendas personalizadas
+│   └── Returns: matplotlib.figure.Figure
+│
+├── crear_analisis_sensibilidad_visual()  → Mapas de calor para sensibilidad
+│   ├── Input: resultados_sensibilidad dict
+│   ├── Gráficos: 2 heatmaps (TIR y VPN) con imshow()
+│   ├── Features: valores en celdas, colorbars, escalas de color personalizadas
+│   └── Returns: (fig_tir_sens, fig_vpn_sens)
+│
+├── crear_comparacion_escenarios()        → Comparación de escenarios múltiples
+│   ├── Escenarios: Pesimista (0.8/1.2), Base (1.0/1.0), Optimista (1.2/0.9)
+│   ├── Gráfico: líneas con marcadores, diferentes colores por escenario
+│   ├── Features: línea de equilibrio, leyenda, grid
+│   └── Returns: matplotlib.figure.Figure
+│
+├── crear_grafico_rentabilidad_temporal() → Evolución temporal de rentabilidad
+│   ├── Subplots: 2 filas (TIR acumulada, VPN acumulado)
+│   ├── Cálculos: TIR simplificada mes a mes, VPN con tasa fija mensual
+│   ├── Features: fill_between, líneas objetivo, marcadores
+│   └── Returns: matplotlib.figure.Figure
+│
+└── crear_resumen_ejecutivo_visual()      → Dashboard ejecutivo completo
+    ├── Layout: GridSpec 3x3 personalizado
+    ├── Elementos: gauges circulares simulados, barras, tabla resumen
+    ├── Métricas: TIR, VPN, ROI, período recuperación, estado viabilidad
+    └── Returns: matplotlib.figure.Figure con suptitle
+
+CONFIGURACIONES GLOBALES:
+├── plt.style.use('default')              → Estilo matplotlib por defecto
+├── sns.set_palette("husl")               → Paleta de colores Seaborn
+└── Figsize estándar: (8,6) a (15,10)    → Tamaños optimizados para Streamlit
+
+================================================================================
+                               MÓDULO: utils.py
+================================================================================
+
+FUNCIONES DE INTERFAZ Y PRESENTACIÓN:
+├── crear_header_empresa()               → Header corporativo HTML/CSS
+├── crear_tarjeta_metrica()              → Tarjetas HTML estilizadas para métricas
+├── mostrar_alerta_personalizada()      → Alertas personalizadas con colores
+└── generar_alerta_validacion()         → Alertas específicas de validación
+
+FUNCIONES DE VALIDACIÓN:
+├── validar_datos_entrada()             → Validación completa de datos proyecto
+├── validar_rango_numerico()            → Validación de rangos numéricos
+├── validar_archivo_subido()            → Validación de archivos Excel subidos
+├── validar_coherencia_flujos()         → Coherencia entre ingresos/egresos
+└── verificar_integridad_datos()        → Verificación integridad completa proyecto
+
+FUNCIONES DE PROCESAMIENTO DE EXCEL:
+├── cargar_archivo_excel()              → Carga y validación de Excel
+├── _detectar_columnas_similares()      → Detección automática columnas
+├── _limpiar_datos_excel()              → Limpieza según especificaciones:
+│   ├── Conceptos vacíos → "Gasto por identificar"
+│   ├── Eliminación montos <= 0
+│   └── Filtrado datos válidos únicamente
+└── exportar_dataframe_excel()          → Exportación DataFrame a Excel
+
+FUNCIONES DE DATOS DE EJEMPLO:
+├── generar_datos_ejemplo()             → Datos financieros de ejemplo
+│   └── Returns: Dict con inversion_inicial, multas_diarias, porcentajes, etc.
+└── crear_egresos_ejemplo()             → DataFrame egresos operativos ejemplo
+    └── Returns: 14 conceptos con montos (Sueldos, servicios, etc.)
+
+FUNCIONES DE CÁLCULOS Y ESTADÍSTICAS:
+├── calcular_estadisticas_descriptivas() → Estadísticas completas de series
+├── calcular_metricas_sensibilidad()    → Métricas de análisis sensibilidad
+├── _calcular_coeficiente_variacion()   → Coeficiente variación de flujos
+└── crear_resumen_metricas()            → Resumen completo métricas proyecto
+
+FUNCIONES DE FORMATEO:
+├── formatear_numero()                  → Formateo números (moneda, %, número, miles)
+├── formatear_tabla_financiera()       → Formato financiero para DataFrames
+└── crear_tabla_comparacion()          → Tablas comparativas de escenarios
+
+FUNCIONES DE UTILIDAD GENERAL:
+├── generar_codigo_proyecto()           → Código único proyecto (timestamp + random)
+├── mostrar_progreso_calculo()          → Barra progreso para cálculos
+├── crear_configuracion_exportacion()  → Configuración para reportes
+└── validar_archivo_subido()            → Validación archivos (extensión, tamaño)
+
+================================================================================
+                               MÓDULO: reports.py
+================================================================================
+[NOTA: Este módulo se importa pero no se proporcionó en los archivos]
+
+FUNCIONES ESPERADAS (basado en importaciones):
+├── generar_excel_completo()            → Generación reporte Excel completo
+├── generar_reporte_ejecutivo_pdf()     → Generación reporte PDF ejecutivo
+├── crear_boton_descarga_excel()       → Botón descarga archivo Excel
+├── crear_boton_descarga_pdf()         → Botón descarga archivo PDF
+└── generar_resumen_hallazgos()        → Resumen automático hallazgos
+
+================================================================================
+                            FLUJO DE EJECUCIÓN PRINCIPAL
+================================================================================
+
+1. INICIALIZACIÓN:
+   main() → load_css() → crear_header_empresa()
+   
+2. CONFIGURACIÓN SESSION_STATE:
+   ├── ProyectoInversion() instance
+   ├── DataProcessor() instance
+   └── verificar_integridad_datos()
+
+3. NAVEGACIÓN PRINCIPAL (Sidebar):
+   ├── "🏠 Inicio" → mostrar_inicio()
+   ├── "💰 Configuración Financiera" → configuracion_financiera()
+   ├── "📊 Análisis" → mostrar_analisis()
+   ├── "📈 Visualizaciones" → mostrar_visualizaciones()
+   └── "📄 Reportes" → generar_reportes()
+
+4. FLUJO DE CONFIGURACIÓN:
+   configuracion_financiera() → Tabs:
+   ├── Tab 1: configurar_inversion_inicial()
+   ├── Tab 2: configurar_ingresos()
+   ├── Tab 3: configurar_egresos()
+   └── Tab 4: generar_proyeccion_completa() → CÁLCULOS PRINCIPALES
+
+5. FLUJO DE CÁLCULOS (generar_proyeccion_completa):
+   ├── Validación datos egresos
+   ├── calcular_ingresos_operativos()
+   ├── calcular_egresos_operativos()
+   ├── Cálculo flujos efectivo (ingresos - egresos)
+   ├── calcular_tir() [Excel-compatible]
+   ├── calcular_vpn() [Excel-compatible]  
+   ├── calcular_roi() [Estándar]
+   ├── calcular_periodo_recuperacion()
+   └── Guardar en proyecto.indicadores
+
+6. FLUJO DE ANÁLISIS:
+   mostrar_analisis() → Tabs:
+   ├── mostrar_indicadores_principales()
+   ├── mostrar_analisis_sensibilidad()
+   ├── mostrar_analisis_escenarios()
+   └── mostrar_analisis_detallado()
+
+7. FLUJO DE VISUALIZACIONES:
+   mostrar_visualizaciones() → Tabs:
+   ├── crear_dashboard_indicadores()
+   ├── crear_analisis_flujo_efectivo()
+   ├── crear_analisis_sensibilidad_visual()
+   ├── crear_comparacion_escenarios()
+   └── crear_resumen_ejecutivo_visual()
+
+================================================================================
+                              DEPENDENCIAS EXTERNAS
+================================================================================
+
+LIBRERÍAS PRINCIPALES:
+├── streamlit                   → Framework web principal
+├── pandas                      → Manipulación de datos y DataFrames
+├── numpy                       → Cálculos numéricos y arrays
+├── matplotlib.pyplot           → Visualizaciones y gráficos
+├── seaborn                     → Estilos y paletas para matplotlib
+├── datetime                    → Manejo de fechas y tiempo
+├── pathlib                     → Manejo de rutas de archivos
+├── io (BytesIO)               → Manejo de streams en memoria
+├── warnings                    → Supresión de advertencias
+├── chardet                     → Detección de codificación de archivos
+├── traceback                   → Información de errores detallada
+└── typing                      → Type hints (Dict, List, Tuple, Optional, Union)
+
+LIBRERÍAS OPCIONALES (con fallback manual):
+├── scipy.stats                 → Cálculos estadísticos avanzados (asimetría, curtosis)
+├── difflib                     → Detección de similitudes en strings
+└── xlsxwriter                  → Escritura avanzada de archivos Excel
+
+ENGINES DE EXCEL:
+├── openpyxl                    → Lectura/escritura archivos .xlsx
+└── xlrd                        → Lectura archivos .xls (legacy)
+
+================================================================================
+                            ESTRUCTURA DE DATOS PRINCIPAL
+================================================================================
+
+session_state:
+├── proyecto: ProyectoInversion
+│   ├── inversion_inicial: float
+│   ├── meses_preoperativos: int
+│   ├── distribucion_preoperativa: Dict[int, float]
+│   ├── saldos_preoperativos: List[Dict]
+│   ├── configuracion_ingresos: Dict
+│   │   ├── multas_diarias: float
+│   │   ├── valor_multa_descuento: float
+│   │   ├── pct_pago_voluntario: float
+│   │   ├── pct_ingreso_operativo: float
+│   │   └── proyeccion: List[float]
+│   ├── configuracion_egresos: Dict
+│   │   ├── egresos_base: Dict[str, float]
+│   │   ├── total_base: float
+│   │   ├── tasa_variacion: float
+│   │   └── detalle_mensual: List[Dict]
+│   ├── ingresos_operativos: List[float]
+│   ├── egresos_operativos: List[float]
+│   ├── flujo_efectivo: List[float]
+│   └── indicadores: Dict
+│       ├── tir: float | None
+│       ├── vpn: float
+│       ├── roi: float
+│       ├── periodo_recuperacion: Dict
+│       └── tasa_descuento: float
+├── data_processor: DataProcessor
+├── datos_ejemplo: Dict
+├── egresos_ejemplo: pd.DataFrame
+└── variables temporales de UI
+
+================================================================================
+                                PUNTOS DE ENTRADA
+================================================================================
+
+ARCHIVO PRINCIPAL:
+python main_app.py
+streamlit run main_app.py
+
+FUNCIONES PÚBLICAS PRINCIPALES:
+├── ProyectoInversion.calcular_tir()
+├── ProyectoInversion.calcular_vpn()
+├── ProyectoInversion.calcular_roi()
+├── ProyectoInversion.analisis_sensibilidad()
+├── DataProcessor.validar_archivo_excel()
+├── crear_dashboard_indicadores()
+└── todas las funciones de utils.py
+
+================================================================================
+                               CONFIGURACIONES
+================================================================================
+
+CONSTANTES PRINCIPALES:
+├── Semilla aleatoria: 42 (reproducibilidad)
+├── Tolerancia TIR: 1e-7 (Excel-compatible)
+├── Iteraciones máximas TIR: 20 (Excel-compatible)
+├── Guess inicial TIR: 0.10 (10%)
+├── Tamaño máximo archivo: 10MB
+├── Mínimo flujo mensual: $1,000
+├── Meses operativos: 6-120 rango válido
+└── Períodos por año: 12 (mensual)
+
+FORMATOS DE SALIDA:
+├── Moneda: "${:,.2f}"
+├── Porcentaje: "{:.2%}"
+├── Número: "{:,.2f}"
+└── Código proyecto: "SEMAVENCA-YYYYMMDD-####"
+
+================================================================================
+                                    RESUMEN
+================================================================================
+
+TOTAL ARCHIVOS PYTHON: 6
+├── main_app.py (archivo principal)
+└── modules/ (5 archivos)
+
+TOTAL CLASES: 2
+├── ProyectoInversion (financial_calculations.py)
+└── DataProcessor (data_processing.py)
+
+TOTAL FUNCIONES: ~80
+├── main_app.py: ~15 funciones
+├── financial_calculations.py: ~15 métodos
+├── data_processing.py: ~20 métodos  
+├── visualizations.py: ~10 funciones
+├── utils.py: ~25 funciones
+└── reports.py: ~5 funciones (estimado)
+
+METODOLOGÍAS IMPLEMENTADAS:
+├── TIR: Newton-Raphson Excel-compatible
+├── VPN: Descuento exacto con conversión tasa
+├── ROI: Fórmula estándar financiera
+├── Sensibilidad: Análisis matricial multivariable
+├── Monte Carlo: Simulación con 1000 iteraciones default
+└── Visualización: matplotlib con estilos profesionales
+
+VALIDACIONES IMPLEMENTADAS:
+├── Excel: columnas requeridas, datos válidos, conceptos vacíos
+├── Numérica: rangos, coherencia, integridad
+├── Archivos: extensión, tamaño, formato
+└── Flujos: positivos/negativos, longitud, proporciones
+
+================================================================================
