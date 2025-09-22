@@ -43,11 +43,6 @@ try:
         crear_grafico_rentabilidad_temporal,
         crear_resumen_ejecutivo_visual,
         crear_grafico_circular_interactivo,
-        crear_grafico_barras_comparativo,
-        crear_grafico_lineas_tendencia,
-        crear_grafico_area_acumulado,
-        mostrar_visualizaciones,
-        mostrar_analisis,
         actualizar_grafico_circular_drilldown,
     )
     from modules.reports import (
