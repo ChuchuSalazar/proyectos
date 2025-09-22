@@ -24,6 +24,7 @@ import os
 import chardet
 from pathlib import Path
 import traceback
+import math
 
 # Carpeta actual donde está main_app.py
 current_dir = Path(__file__).parent
@@ -41,6 +42,13 @@ try:
         crear_comparacion_escenarios,
         crear_grafico_rentabilidad_temporal,
         crear_resumen_ejecutivo_visual,
+        crear_grafico_circular_interactivo,
+        crear_grafico_barras_comparativo,
+        crear_grafico_lineas_tendencia,
+        crear_grafico_area_acumulado,
+        mostrar_visualizaciones,
+        mostrar_analisis,
+        actualizar_grafico_circular_drilldown,
     )
     from modules.reports import (
         generar_excel_completo,
@@ -1510,49 +1518,66 @@ def mostrar_analisis_sensibilidad(proyecto):
 
 
 def mostrar_analisis_escenarios(proyecto):
-    """Muestra análisis de escenarios"""
-
+    """Muestra análisis de escenarios configurables"""
+    
     st.subheader("📊 Análisis de Escenarios")
-
+    
     if not hasattr(proyecto, "indicadores"):
         st.warning("⚠️ No hay datos para análisis de escenarios")
         return
-
-    # Definir escenarios
+    
+    # NUEVA SECCIÓN: Configuración de Escenarios
+    st.markdown("### ⚙️ Configurar Escenarios")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Escenario Pesimista:**")
+        pesimista_ing = st.slider("Ingresos Pesimista (%)", -50, 0, -20, key="pesimista_ing")
+        pesimista_egr = st.slider("Egresos Pesimista (%)", 0, 50, 20, key="pesimista_egr")
+    
+    with col2:
+        st.markdown("**Escenario Optimista:**")
+        optimista_ing = st.slider("Ingresos Optimista (%)", 0, 50, 20, key="optimista_ing")
+        optimista_egr = st.slider("Egresos Optimista (%)", -50, 0, -10, key="optimista_egr")
+    
+    # Definir escenarios con parámetros del usuario
     escenarios = {
-        "Pesimista": {"ing_factor": 0.8, "egr_factor": 1.2},
+        "Pesimista": {"ing_factor": 1 + pesimista_ing/100, "egr_factor": 1 + pesimista_egr/100},
         "Base": {"ing_factor": 1.0, "egr_factor": 1.0},
-        "Optimista": {"ing_factor": 1.2, "egr_factor": 0.9},
+        "Optimista": {"ing_factor": 1 + optimista_ing/100, "egr_factor": 1 + optimista_egr/100},
     }
-
-    # Calcular métricas por escenario
-    resultados_escenarios = []
-
-    for nombre, factores in escenarios.items():
-        # Simular cálculos (simplificado)
-        tir_base = proyecto.indicadores.get("tir", 0)
-        vpn_base = proyecto.indicadores.get("vpn", 0)
-        roi_base = proyecto.indicadores.get("roi", 0)
-
-        # Aplicar factores (aproximación)
-        factor_combined = factores["ing_factor"] / factores["egr_factor"]
-
-        tir_escenario = tir_base * factor_combined if tir_base else 0
-        vpn_escenario = vpn_base * factor_combined
-        roi_escenario = roi_base * factor_combined
-
-        resultados_escenarios.append(
-            {
-                "Escenario": nombre,
-                "TIR": f"{tir_escenario:.2%}" if tir_escenario else "N/A",
-                "VPN": f"${vpn_escenario:,.0f}",
-                "ROI": f"{roi_escenario:.1f}%",
-            }
-        )
-
-    # Mostrar tabla de escenarios
-    df_escenarios = pd.DataFrame(resultados_escenarios)
-    st.dataframe(df_escenarios, use_container_width=True)
+    
+    # Botón para recalcular
+    if st.button("🔄 Recalcular Escenarios"):
+        resultados_escenarios = []
+        
+        for nombre, factores in escenarios.items():
+            # CALCULAR REAL (no aproximación)
+            if hasattr(proyecto, 'ingresos_operativos') and hasattr(proyecto, 'egresos_operativos'):
+                ingresos_ajustados = [ing * factores["ing_factor"] for ing in proyecto.ingresos_operativos]
+                egresos_ajustados = [egr * factores["egr_factor"] for egr in proyecto.egresos_operativos]
+                flujos_ajustados = [ing - egr for ing, egr in zip(ingresos_ajustados, egresos_ajustados)]
+                
+                # Calcular indicadores reales
+                tir_escenario = proyecto.calcular_tir(flujos_ajustados, proyecto.inversion_inicial)
+                vpn_escenario = proyecto.calcular_vpn(flujos_ajustados, proyecto.inversion_inicial, 0.13)
+                roi_escenario = proyecto.calcular_roi(flujos_ajustados, proyecto.inversion_inicial)
+                
+                resultados_escenarios.append({
+                    "Escenario": nombre,
+                    "Parámetros": f"Ing:{factores['ing_factor']-1:+.0%}, Egr:{factores['egr_factor']-1:+.0%}",
+                    "TIR": f"{tir_escenario:.2%}" if tir_escenario else "No calc.",
+                    "VPN": f"${vpn_escenario:,.0f}",
+                    "ROI": f"{roi_escenario:.1f}%"
+                })
+        
+        # Mostrar tabla de escenarios
+        df_escenarios = pd.DataFrame(resultados_escenarios)
+        st.dataframe(df_escenarios, use_container_width=True)
+        
+        # Guardar para gráficos
+        st.session_state.escenarios_calculados = resultados_escenarios
 
 
 def mostrar_analisis_detallado(proyecto):
@@ -1637,13 +1662,14 @@ def mostrar_visualizaciones(proyecto):
         return
 
     # Tabs para organizar visualizaciones
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    tab1, tab2, tab3, tab4, tab5 , tab6 = st.tabs(
         [
             "🎯 Dashboard",
             "💰 Flujo Efectivo",
             "📊 Sensibilidad",
             "📄 Escenarios",
             "📋 Ejecutivo",
+            "🥧 Composición Financiera"
         ]
     )
 
@@ -1700,6 +1726,31 @@ def mostrar_visualizaciones(proyecto):
         if fig_ejecutivo:
             st.pyplot(fig_ejecutivo, use_container_width=True)
 
+    with tab6:  # Nueva tab
+        st.subheader("🥧 Composición Financiera Interactiva")
+        
+        fig_circular, datos_jerarquicos = crear_grafico_circular_interactivo(proyecto)
+        
+        if fig_circular:
+            # Mostrar gráfico principal
+            selected_points = st.plotly_chart(fig_circular, use_container_width=True, key="circular_main")
+            
+            # Botones para drill-down
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("📈 Desglose Ingresos"):
+                    fig_detalle = actualizar_grafico_circular_drilldown(datos_jerarquicos, "Ingresos Totales")
+                    st.plotly_chart(fig_detalle, use_container_width=True)
+            
+            with col2:
+                if st.button("📉 Desglose Egresos"):
+                    fig_detalle = actualizar_grafico_circular_drilldown(datos_jerarquicos, "Egresos Totales")
+                    st.plotly_chart(fig_detalle, use_container_width=True)
+            
+            with col3:
+                if st.button("🔄 Volver General"):
+                    st.rerun()
 
 def generar_reportes(proyecto):
     """Genera y permite descargar reportes"""
