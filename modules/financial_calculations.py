@@ -474,62 +474,82 @@ class ProyectoInversion:
     # ---------------------------
     # Análisis de sensibilidad CORREGIDO
     # ---------------------------
-    def analisis_sensibilidad(
-        self, variaciones_ingresos, variaciones_egresos, tasa_descuento
-    ):
+    def analisis_sensibilidad(self, variaciones_ingresos, variaciones_egresos, tasa_descuento):
         """
-        Realiza análisis de sensibilidad multivariable CORREGIDO
-
-        Returns:
-            dict: Matrices [len(variaciones_egresos) x len(variaciones_ingresos)] de TIR y VPN
+        Realiza análisis de sensibilidad multivariable - CORREGIDO
         """
         resultados = {
-            "tir_matriz": [],
-            "vpn_matriz": [],
-            "variaciones_ing": variaciones_ingresos,
-            "variaciones_egr": variaciones_egresos,
+            'tir_matriz': [],
+            'vpn_matriz': [],
+            'variaciones_ing': variaciones_ingresos,
+            'variaciones_egr': variaciones_egresos
         }
-
-        ingresos_base = getattr(self, "ingresos_operativos", [])
-        egresos_base = getattr(self, "egresos_operativos", [])
-
-        if not ingresos_base or not egresos_base:
+    
+        # CORRECCIÓN: Verificar que hay datos base
+        if not hasattr(self, 'ingresos_operativos') or not self.ingresos_operativos:
+            print("❌ Error: No hay ingresos operativos para análisis de sensibilidad")
             return resultados
-
-        # Iterar por egresos (filas) y luego ingresos (columnas)
+    
+        if not hasattr(self, 'egresos_operativos') or not self.egresos_operativos:
+            print("❌ Error: No hay egresos operativos para análisis de sensibilidad")
+            return resultados
+    
+        ingresos_base = self.ingresos_operativos.copy()
+        egresos_base = self.egresos_operativos.copy()
+    
+        print(f"🔍 Base para sensibilidad - Ingresos: {len(ingresos_base)} meses, Egresos: {len(egresos_base)} meses")
+        print(f"🔍 Primer ingreso: ${ingresos_base[0]:,.0f}, Primer egreso: ${egresos_base[0]:,.0f}")
+    
         for var_egr in variaciones_egresos:
             fila_tir = []
             fila_vpn = []
-
+        
             for var_ing in variaciones_ingresos:
-                # Aplicar variaciones
-                ingresos_ajustados = [
-                    ing * (1 + var_ing / 100) for ing in ingresos_base
-                ]
-                egresos_ajustados = [egr * (1 + var_egr / 100) for egr in egresos_base]
-                flujos_ajustados = [
-                    ing - egr for ing, egr in zip(ingresos_ajustados, egresos_ajustados)
-                ]
-
-                # Calcular TIR (anualizada)
-                tir_ajustada = self.calcular_tir(
-                    flujos_ajustados,
-                    self.inversion_inicial,
-                    devolver="anual",
-                    excel_compatible=True,
-                )
-
+                # Aplicar variaciones a las series completas
+                ingresos_ajustados = [ing * (1 + var_ing/100) for ing in ingresos_base]
+                egresos_ajustados = [egr * (1 + var_egr/100) for egr in egresos_base]
+            
+                # Calcular flujo ajustado
+                flujos_ajustados = [ing - egr for ing, egr in zip(ingresos_ajustados, egresos_ajustados)]
+            
+                # CORRECCIÓN: Validar flujos antes de calcular TIR
+                flujo_total = sum(flujos_ajustados)
+                if flujo_total <= 0:
+                    print(f"⚠️ Flujo negativo para Ing:{var_ing}%, Egr:{var_egr}% = ${flujo_total:,.0f}")
+                    tir_ajustada = -0.99  # TIR muy negativa
+                else:
+                    # Calcular TIR con validación
+                    try:
+                        tir_ajustada = self.calcular_tir(flujos_ajustados, self.inversion_inicial)
+                        if tir_ajustada is None:
+                            print(f"⚠️ TIR no calculable para Ing:{var_ing}%, Egr:{var_egr}%")
+                            tir_ajustada = 0
+                        else:
+                            print(f"✅ TIR calculada: Ing:{var_ing}%, Egr:{var_egr}% = {tir_ajustada:.2%}")
+                    except Exception as e:
+                        print(f"❌ Error calculando TIR: {e}")
+                        tir_ajustada = 0
+            
                 # Calcular VPN
-                vpn_ajustado = self.calcular_vpn(
-                    flujos_ajustados, self.inversion_inicial, tasa_descuento
-                )
-
-                fila_tir.append(tir_ajustada if tir_ajustada is not None else 0)
+                try:
+                    vpn_ajustado = self.calcular_vpn(flujos_ajustados, self.inversion_inicial, tasa_descuento)
+                except Exception as e:
+                    print(f"❌ Error calculando VPN: {e}")
+                    vpn_ajustado = -self.inversion_inicial
+            
+                fila_tir.append(tir_ajustada)
                 fila_vpn.append(vpn_ajustado)
-
-            resultados["tir_matriz"].append(fila_tir)
-            resultados["vpn_matriz"].append(fila_vpn)
-
+        
+            resultados['tir_matriz'].append(fila_tir)
+            resultados['vpn_matriz'].append(fila_vpn)
+    
+        # Verificar resultados
+        matriz_tir = np.array(resultados['tir_matriz'])
+        if np.all(matriz_tir == 0):
+            print("❌ PROBLEMA: Toda la matriz TIR está en cero")
+        else:
+            print(f"✅ Matriz TIR calculada. Rango: {np.min(matriz_tir):.2%} a {np.max(matriz_tir):.2%}")
+    
         return resultados
 
     # ---------------------------

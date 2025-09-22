@@ -11,7 +11,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 from datetime import datetime
-
+import plotly.graph_objects as go
 
 # Configurar estilo de matplotlib
 plt.style.use("default")
@@ -499,6 +499,136 @@ def crear_grafico_rentabilidad_temporal(proyecto):
     ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
+    return fig
+
+def crear_grafico_circular_interactivo(proyecto):
+    """
+    Crea gráfico circular interactivo con drill-down jerárquico
+    """
+    if not hasattr(proyecto, 'configuracion_ingresos') or not hasattr(proyecto, 'configuracion_egresos'):
+        return None
+    
+    # Datos para el gráfico principal
+    config_ing = proyecto.configuracion_ingresos
+    config_egr = proyecto.configuracion_egresos
+    
+    # Nivel 1: Ingresos vs Egresos Totales
+    ingreso_total = config_ing.get('ingreso_operativo_base', 0) * len(getattr(proyecto, 'flujo_efectivo', [1]))
+    egreso_total = config_egr.get('total_base', 0) * len(getattr(proyecto, 'flujo_efectivo', [1]))
+    
+    datos_nivel1 = [
+        {"Concepto": "Ingresos Totales", "Monto": ingreso_total, "Tipo": "Ingreso", "Nivel": 1},
+        {"Concepto": "Egresos Totales", "Monto": egreso_total, "Tipo": "Egreso", "Nivel": 1}
+    ]
+    
+    # Nivel 2: Desglose de Ingresos
+    datos_nivel2_ing = [
+        {"Concepto": "Multas Cobradas", "Monto": config_ing.get('pago_voluntario', 0), "Padre": "Ingresos Totales", "Nivel": 2},
+        {"Concepto": "Otros Ingresos", "Monto": ingreso_total - config_ing.get('pago_voluntario', 0), "Padre": "Ingresos Totales", "Nivel": 2}
+    ]
+    
+    # Nivel 2: Desglose de Egresos
+    egresos_base = config_egr.get('egresos_base', {})
+    datos_nivel2_egr = []
+    for concepto, monto in egresos_base.items():
+        datos_nivel2_egr.append({
+            "Concepto": concepto, 
+            "Monto": monto * len(getattr(proyecto, 'flujo_efectivo', [1])), 
+            "Padre": "Egresos Totales", 
+            "Nivel": 2
+        })
+    
+    # Crear gráfico con Plotly
+    fig = go.Figure()
+    
+    # Estado inicial: Nivel 1
+    colores = ['#2E8B57', '#CD5C5C']  # Verde para ingresos, rojo para egresos
+    
+    fig.add_trace(go.Pie(
+        labels=[d["Concepto"] for d in datos_nivel1],
+        values=[d["Monto"] for d in datos_nivel1],
+        hole=0.4,
+        marker=dict(colors=colores),
+        textinfo='label+percent+value',
+        texttemplate='<b>%{label}</b><br>%{percent}<br>$%{value:,.0f}',
+        hovertemplate='<b>%{label}</b><br>Monto: $%{value:,.0f}<br>Porcentaje: %{percent}<extra></extra>',
+        rotation=0,
+        name="Nivel1"
+    ))
+    
+    fig.update_layout(
+        title={
+            'text': "Composición Financiera del Proyecto<br><sub>Haga clic en las secciones para explorar</sub>",
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 16}
+        },
+        annotations=[
+            dict(
+                text=f"FLUJO NETO<br>${ingreso_total - egreso_total:,.0f}",
+                x=0.5, y=0.5,
+                font_size=14,
+                font_color="white" if ingreso_total > egreso_total else "red",
+                showarrow=False
+            )
+        ],
+        height=600,
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="middle",
+            y=0.5,
+            xanchor="left",
+            x=1.05
+        )
+    )
+    
+    return fig, {
+        'nivel1': datos_nivel1,
+        'nivel2_ing': datos_nivel2_ing,
+        'nivel2_egr': datos_nivel2_egr
+    }
+
+def actualizar_grafico_circular_drilldown(datos_jerarquicos, seleccion):
+    """
+    Actualiza el gráfico circular según la selección (drill-down)
+    """
+    if seleccion == "Ingresos Totales":
+        # Mostrar desglose de ingresos
+        datos = datos_jerarquicos['nivel2_ing']
+        titulo = "Desglose de Ingresos"
+        colores = ['#228B22', '#32CD32', '#90EE90']
+        
+    elif seleccion == "Egresos Totales":
+        # Mostrar desglose de egresos
+        datos = datos_jerarquicos['nivel2_egr']
+        titulo = "Desglose de Egresos"
+        colores = ['#DC143C', '#B22222', '#CD5C5C', '#F08080', '#FFA07A']
+        
+    else:
+        # Volver al nivel 1
+        datos = datos_jerarquicos['nivel1']
+        titulo = "Composición General"
+        colores = ['#2E8B57', '#CD5C5C']
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Pie(
+        labels=[d["Concepto"] for d in datos],
+        values=[d["Monto"] for d in datos],
+        hole=0.3,
+        marker=dict(colors=colores[:len(datos)]),
+        textinfo='label+percent+value',
+        texttemplate='<b>%{label}</b><br>%{percent}<br>$%{value:,.0f}',
+        hovertemplate='<b>%{label}</b><br>Monto: $%{value:,.0f}<br>Porcentaje: %{percent}<extra></extra>',
+    ))
+    
+    fig.update_layout(
+        title=titulo,
+        height=500,
+        showlegend=True
+    )
+    
     return fig
 
 
